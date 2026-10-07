@@ -1,7 +1,8 @@
 from typing import Any, TypeVar
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import Table, create_engine, inspect, select
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.schema import AddConstraint
 
 # DEM (Data Expert Manipulator): one per model, in the model's file.
 # Holds model-specific operations and calls Database.
@@ -25,6 +26,14 @@ class Database:
     def create_tables(self) -> None:
         """Create missing tables."""
         Base.metadata.create_all(self.engine)
+
+    def ensure_foreign_key(self, table: Table, name: str) -> None:
+        """Add a foreign key declared on the model to a table that already exists."""
+        if any(fk["name"] == name for fk in inspect(self.engine).get_foreign_keys(table.name)):
+            return
+        constraint = next(c for c in table.foreign_key_constraints if c.name == name)
+        with self.engine.begin() as connection:
+            connection.execute(AddConstraint(constraint))
 
     def add(self, obj: T) -> T:
         """Insert one object."""
@@ -57,6 +66,15 @@ class Database:
         """Save changes of an object; use the returned copy."""
         with self._session_factory.begin() as session:
             return session.merge(obj)
+
+    def rename_key(self, model: type[T], old_key: Any, attribute: str, new_value: Any) -> bool:
+        """Change a primary key value; foreign keys with ON UPDATE CASCADE follow. False if `old_key` is unknown."""
+        with self._session_factory.begin() as session:
+            obj = session.get(model, old_key)
+            if obj is None:
+                return False
+            setattr(obj, attribute, new_value)
+        return True
 
     def delete(self, obj: Base) -> None:
         """Delete the object's row."""

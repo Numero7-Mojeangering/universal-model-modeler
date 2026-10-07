@@ -21,4 +21,22 @@ pip install sqlalchemy
 ```bash
 py -m pip install "psycopg[binary]"
 ```
+```bash
+pip install fastapi "uvicorn[standard]"
+```
+```bash
+pip install PySide6 requests
+```
+
+# Running the server :
+```bash
+cd backend/python
+py main.py
+```
+
+# Running the frontend :
+```bash
+cd frontend/python
+py main.py
+```
 
