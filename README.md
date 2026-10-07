@@ -25,7 +25,8 @@ MADE FROM FOUR PARTS
 
 # GOAL OF UMM
 
-The goal of this application is to be able to model anything
+The goal of this application is to be able to model anything*
+*THE STAR MEANS THAT IT CANNOT MODEL WHAT YOU CANT IMAGINE SOLUTION HOW TO MODEL THINGS
 while offering to the user an intuitive graphical experience that is fun and appreaciable.
 
 modeling a process
