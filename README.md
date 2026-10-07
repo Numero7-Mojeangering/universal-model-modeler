@@ -10,16 +10,16 @@ a framework that can help fast, easy in the modern world gouverned by informatio
 
 MADE FROM FOUR PARTS
 
-Database that hold your model and data
+1) Database that hold your model and data
 - we choose a postgre database in docker
 
-Server that uses the database to talk to clients
+2) Server that uses the database to talk to clients
 - this automatically performs the setup of the database schema to start using this
 
-Clients that interact with the user
+3) Clients that interact with the user
 - this is used to use the tool to define what the user wants
 
-Interfaces that read/write data to real-world devices
+4) Interfaces that read/write data to real-world devices
 - small program to talk to the server to send/receive events/triggers to the modelled user's model.
 
 
