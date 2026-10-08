@@ -1,3 +1,7 @@
+# Info:
+Pull dev branch for latest things
+Each minimal function viable products of features are pushed to test (dont exist rn) or main branch
+
 # In short...
 
 UMM
