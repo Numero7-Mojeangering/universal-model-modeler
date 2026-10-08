@@ -44,3 +44,11 @@ optimizing something specific
 
 the application "Interfaces" can communicate with real-world data to update the state of the model (if numerical twin is wanted) or to behave as an intelligence framework that call other applications to performs automations.
 
+
+# Installation
+Currently the app uses postgre with python thing version
+Needs to install db in docker :
+```bash
+docker run --name umm-postgre -e POSTGRES_PASSWORD=password -p 5432:5432 -d postgres
+```
+
