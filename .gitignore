@@ -1,0 +1,4 @@
+__pycache__/
+.venv/
+# server secrets: OPAQUE setup and the self-signed TLS key
+backend/python/data/

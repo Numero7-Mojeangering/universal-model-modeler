@@ -1,15 +1,61 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, BeforeValidator, StringConstraints
 
 from models.catalogue import DEFAULT_COLOR
 from models.entity import Entity, Property, Relation
 from models.layout import EntityLayout
+from models.user import User
 
 Shape = Literal["box", "circle", "triangle", "hexagon", "diamond"]
 Color = Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 JsonDict = dict[str, Any]
+Username = Annotated[
+    str,
+    BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
+    StringConstraints(pattern=r"^[a-z0-9_.-]{3,32}$"),
+]
+DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
+Blob = Annotated[str, StringConstraints(max_length=4096)]  # a base64 protocol message
+
+
+class LoginStart(BaseModel):
+    username: Username
+    request: Blob
+
+
+class LoginFinish(BaseModel):
+    login_id: str
+    request: Blob
+    device_key: Blob  # the device's Ed25519 public key
+    device_proof: Blob  # ties that key to this OPAQUE session
+
+
+class RegisterStart(BaseModel):
+    username: Username
+    request: Blob
+
+
+class RegisterFinish(BaseModel):
+    username: Username
+    request: Blob
+
+
+class ProfilePatch(BaseModel):
+    display_name: DisplayName | None = None
+    cursor_color: Color | None = None
+
+
+class UserCreate(BaseModel):
+    username: Username
+    display_name: DisplayName | None = None
+    is_admin: bool = False
+
+
+class UserPatch(BaseModel):
+    disabled: bool | None = None
+    is_admin: bool | None = None
 
 
 class EntityIn(BaseModel):
@@ -62,6 +108,18 @@ def entity_dict(entity: Entity, properties: list[Property], layout: EntityLayout
         "type": entity.type,
         "properties": {p.name: p.value for p in sorted(properties, key=lambda p: p.name)},
         "layout": None if layout is None else {"x": layout.x, "y": layout.y},
+    }
+
+
+def user_dict(user: User) -> JsonDict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "cursor_color": user.cursor_color,
+        "is_admin": user.is_admin,
+        "disabled": user.disabled,
+        "has_password": user.opaque_record is not None,
     }
 
 

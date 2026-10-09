@@ -1,21 +1,20 @@
+import asyncio
 import json
-import os
-import re
 from collections import Counter, defaultdict
 from contextlib import asynccontextmanager
-from dataclasses import asdict, dataclass
 from typing import Any, Literal, cast
 
-import uvicorn
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
-from database import Database
-from migrations import migrate
+import services
+from auth import authenticate_ws, authenticated, routers
+from hub import apply_cursor
 from models.catalogue import DEFAULT_COLOR, DEFAULT_SHAPE, CatalogueDEM
 from models.entity import Entity, EntityDEM, Property, PropertyDEM, RelationDEM
 from models.layout import LayoutDEM
+from services import db, hub
 from schemas import (
     EntityIn,
     EntityPatch,
@@ -30,7 +29,6 @@ from schemas import (
     relation_dict,
 )
 
-db = Database(os.environ.get("DATABASE_URL", "postgresql+psycopg://postgres:password@localhost:5432/postgres"))
 entities = EntityDEM(db)
 properties = PropertyDEM(db)
 relations = RelationDEM(db)
@@ -38,85 +36,15 @@ layouts = LayoutDEM(db)
 catalogue = CatalogueDEM(db)
 
 
-@dataclass
-class Presence:
-    """A connected user's cursor and look. Lives only in memory."""
-
-    id: int
-    name: str = "anonymous"
-    color: str = "#888888"
-    x: float | None = None
-    y: float | None = None
-    inside: bool = False  # False while the cursor is outside the editor view
-
-    def to_dict(self) -> JsonDict:
-        return asdict(self)
-
-
-COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
-
-
-def apply_presence(presence: Presence, message: JsonDict) -> bool:
-    """Update the presence from a client message; return True if it changed."""
-    kind = message.get("event")
-    if kind == "profile":
-        name = str(message.get("name", "")).strip()[:32]
-        color = str(message.get("color", ""))
-        if name:
-            presence.name = name
-        if COLOR_PATTERN.fullmatch(color):
-            presence.color = color
-        return True
-    if kind == "cursor":
-        x, y = message.get("x"), message.get("y")
-        presence.inside = bool(message.get("inside"))
-        if presence.inside and isinstance(x, (int, float)) and isinstance(y, (int, float)):
-            presence.x, presence.y = float(x), float(y)
-        return True
-    return False
-
-
-class Hub:
-    """Pushes every change to all connected clients and relays their cursors."""
-
-    def __init__(self):
-        self.clients: dict[WebSocket, Presence] = {}
-        self._next_id = 1
-
-    async def connect(self, ws: WebSocket) -> Presence:
-        await ws.accept()
-        presence = Presence(id=self._next_id)
-        self._next_id += 1
-        others = [p.to_dict() for p in self.clients.values()]
-        self.clients[ws] = presence
-        await ws.send_json({"event": "presence.snapshot", "users": others})
-        return presence
-
-    def disconnect(self, ws: WebSocket) -> Presence | None:
-        return self.clients.pop(ws, None)
-
-    async def broadcast(self, event: JsonDict, exclude: WebSocket | None = None) -> None:
-        for ws in list(self.clients):
-            if ws is exclude:
-                continue
-            try:
-                await ws.send_json(event)
-            except Exception:
-                self.disconnect(ws)
-
-
-hub = Hub()
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    db.create_tables()
-    migrate(db)
+    services.loop = asyncio.get_running_loop()
     yield
     db.close()
 
 
 app = FastAPI(title="umm", lifespan=lifespan)
+api = APIRouter(dependencies=[Depends(authenticated)])  # everything here needs a signed-in device
 
 
 @app.exception_handler(IntegrityError)
@@ -153,7 +81,7 @@ async def _publish_types(changed: bool) -> None:
         await hub.broadcast({"event": "types.updated", **_types()})
 
 
-@app.get("/types")
+@api.get("/types")
 async def get_types() -> JsonDict:
     return _types()
 
@@ -173,12 +101,12 @@ def _usage() -> JsonDict:
     }
 
 
-@app.get("/catalogue")
+@api.get("/catalogue")
 async def get_catalogue() -> JsonDict:
     return _usage()
 
 
-@app.delete("/catalogue/{kind}/{name:path}", status_code=204)
+@api.delete("/catalogue/{kind}/{name:path}", status_code=204)
 async def delete_catalogue_entry(kind: Literal["entity", "relation", "property"], name: str) -> None:
     """Delete a type or property name that nothing uses any more."""
     key = {"entity": "entity_types", "relation": "relation_types", "property": "property_names"}[kind]
@@ -196,7 +124,7 @@ async def delete_catalogue_entry(kind: Literal["entity", "relation", "property"]
     await _publish_types(True)
 
 
-@app.put("/types/entity/{name:path}/style")
+@api.put("/types/entity/{name:path}/style")
 async def set_entity_style(name: str, body: StyleIn) -> JsonDict:
     if not catalogue.set_entity_style(name, body.shape, body.color):
         raise HTTPException(404, "Entity type not found")
@@ -204,7 +132,7 @@ async def set_entity_style(name: str, body: StyleIn) -> JsonDict:
     return _types()
 
 
-@app.get("/graph")
+@api.get("/graph")
 async def get_graph() -> JsonDict:
     props: defaultdict[int, list[Property]] = defaultdict(list)
     for p in properties.all():
@@ -217,7 +145,7 @@ async def get_graph() -> JsonDict:
     }
 
 
-@app.post("/entities", status_code=201)
+@api.post("/entities", status_code=201)
 async def create_entity(body: EntityIn) -> JsonDict:
     await _publish_types(catalogue.add_entity_type(body.type, body.shape, body.color))
     entity = entities.create(body.type)
@@ -225,7 +153,7 @@ async def create_entity(body: EntityIn) -> JsonDict:
     return await _publish_entity(entity.id)
 
 
-@app.patch("/entities/{entity_id}")
+@api.patch("/entities/{entity_id}")
 async def edit_entity(entity_id: int, body: EntityPatch) -> JsonDict:
     await _publish_types(
         catalogue.add_entity_type(body.type, body.shape or DEFAULT_SHAPE, body.color or DEFAULT_COLOR)
@@ -234,13 +162,13 @@ async def edit_entity(entity_id: int, body: EntityPatch) -> JsonDict:
     return await _publish_entity(entity_id)
 
 
-@app.delete("/entities/{entity_id}", status_code=204)
+@api.delete("/entities/{entity_id}", status_code=204)
 async def delete_entity(entity_id: int) -> None:
     entities.remove(_entity_or_404(entity_id))
     await hub.broadcast({"event": "entity.deleted", "id": entity_id})
 
 
-@app.post("/entities/{entity_id}/properties", status_code=201)
+@api.post("/entities/{entity_id}/properties", status_code=201)
 async def create_property(entity_id: int, body: PropertyCreate) -> JsonDict:
     _entity_or_404(entity_id)
     if any(p.name == body.name for p in properties.of(entity_id)):
@@ -250,7 +178,7 @@ async def create_property(entity_id: int, body: PropertyCreate) -> JsonDict:
     return await _publish_entity(entity_id)
 
 
-@app.put("/entities/{entity_id}/properties/{name:path}")
+@api.put("/entities/{entity_id}/properties/{name:path}")
 async def set_property(entity_id: int, name: str, body: PropertyIn) -> JsonDict:
     _entity_or_404(entity_id)
     if properties.set_value(entity_id, name, body.value) is None:
@@ -258,7 +186,7 @@ async def set_property(entity_id: int, name: str, body: PropertyIn) -> JsonDict:
     return await _publish_entity(entity_id)
 
 
-@app.put("/property-names/{name:path}")
+@api.put("/property-names/{name:path}")
 async def rename_property_name(name: str, body: RenameIn) -> JsonDict:
     """Rename a property name on every entity that uses it."""
     if not catalogue.has_property_name(name):
@@ -272,7 +200,7 @@ async def rename_property_name(name: str, body: RenameIn) -> JsonDict:
     return _types()
 
 
-@app.delete("/entities/{entity_id}/properties/{name:path}")
+@api.delete("/entities/{entity_id}/properties/{name:path}")
 async def delete_property(entity_id: int, name: str) -> JsonDict:
     _entity_or_404(entity_id)
     if not properties.remove(entity_id, name):
@@ -280,14 +208,14 @@ async def delete_property(entity_id: int, name: str) -> JsonDict:
     return await _publish_entity(entity_id)
 
 
-@app.put("/entities/{entity_id}/layout")
+@api.put("/entities/{entity_id}/layout")
 async def set_layout(entity_id: int, body: LayoutIn) -> JsonDict:
     _entity_or_404(entity_id)
     layouts.set(entity_id, body.x, body.y)
     return await _publish_entity(entity_id)
 
 
-@app.post("/relations", status_code=201)
+@api.post("/relations", status_code=201)
 async def create_relation(body: RelationIn) -> JsonDict:
     await _publish_types(catalogue.add_relation_type(body.type))
     data = relation_dict(relations.create(body.source_id, body.target_id, body.type))
@@ -295,7 +223,7 @@ async def create_relation(body: RelationIn) -> JsonDict:
     return data
 
 
-@app.delete("/relations", status_code=204)
+@api.delete("/relations", status_code=204)
 async def delete_relation(source_id: int, target_id: int, type: str) -> None:
     if not relations.remove(source_id, target_id, type):
         raise HTTPException(404, "Relation not found")
@@ -304,9 +232,17 @@ async def delete_relation(source_id: int, target_id: int, type: str) -> None:
     )
 
 
+@app.get("/health")
+async def health() -> JsonDict:
+    return {"status": "ok"}
+
+
 @app.websocket("/ws")
 async def live(ws: WebSocket) -> None:
-    presence = await hub.connect(ws)
+    auth = await authenticate_ws(ws)
+    if auth is None:
+        return
+    presence = await hub.connect(ws, auth.user, auth.session.id)
     try:
         while True:
             text = await ws.receive_text()
@@ -314,7 +250,7 @@ async def live(ws: WebSocket) -> None:
                 raw: Any = json.loads(text)
             except ValueError:
                 continue
-            if isinstance(raw, dict) and apply_presence(presence, cast(JsonDict, raw)):
+            if isinstance(raw, dict) and apply_cursor(presence, cast(JsonDict, raw)):
                 await hub.broadcast({"event": "presence.update", "user": presence.to_dict()}, exclude=ws)
     except WebSocketDisconnect:
         pass
@@ -323,5 +259,6 @@ async def live(ws: WebSocket) -> None:
         await hub.broadcast({"event": "presence.left", "id": presence.id})
 
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+app.include_router(api)
+for router in routers:
+    app.include_router(router)

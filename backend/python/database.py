@@ -27,6 +27,17 @@ class Database:
         """Create missing tables."""
         Base.metadata.create_all(self.engine)
 
+    def table_columns(self, name: str) -> set[str]:
+        """Column names of an existing table; empty if the table does not exist."""
+        inspector = inspect(self.engine)
+        if not inspector.has_table(name):
+            return set()
+        return {column["name"] for column in inspector.get_columns(name)}
+
+    def drop_table(self, table: Table) -> None:
+        """Drop a table if it exists."""
+        table.drop(self.engine, checkfirst=True)
+
     def ensure_foreign_key(self, table: Table, name: str) -> None:
         """Add a foreign key declared on the model to a table that already exists."""
         if any(fk["name"] == name for fk in inspect(self.engine).get_foreign_keys(table.name)):

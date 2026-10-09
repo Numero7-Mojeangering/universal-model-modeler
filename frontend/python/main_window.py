@@ -1,9 +1,8 @@
 import json
-import random
 from typing import Any, Callable
 
 import requests
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSettings, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QCryptographicHash, QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -14,7 +13,7 @@ from PySide6.QtGui import (
     QResizeEvent,
     QWheelEvent,
 )
-from PySide6.QtNetwork import QAbstractSocket
+from PySide6.QtNetwork import QAbstractSocket, QNetworkRequest
 from PySide6.QtWebSockets import QWebSocket
 from PySide6.QtWidgets import (
     QApplication,
@@ -44,7 +43,8 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
-from api import Api
+from admin_dialog import UsersDialog
+from api import Api, AuthError, describe_error
 from catalogue_dialog import CatalogueDialog
 from data import EntityInfo, TypeInfo
 from icons import icon
@@ -53,23 +53,6 @@ from scene import SHAPES, EntityItem, GraphScene, RelationItem
 
 InspectorKey = tuple[str, str, str, tuple[tuple[str, str | None], ...]]
 MIN_ZOOM, MAX_ZOOM = 0.05, 5.0
-PALETTE = ["#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#008080", "#9a6324", "#e0457b"]
-
-
-def _load_profile() -> tuple[str, str]:
-    """The user's cursor name and colour, remembered between runs."""
-    settings = QSettings("umm", "client")
-    name = str(settings.value("name", "")) or f"user-{random.randint(1000, 9999)}"
-    color = str(settings.value("color", ""))
-    if not QColor(color).isValid():
-        color = random.choice(PALETTE)
-    return name, color
-
-
-def _save_profile(name: str, color: str) -> None:
-    settings = QSettings("umm", "client")
-    settings.setValue("name", name)
-    settings.setValue("color", color)
 
 
 def _do(fn: Callable[..., object], *args: object) -> Callable[..., None]:
@@ -410,7 +393,7 @@ class MainWindow(QMainWindow):
         self.view = GraphView(self.graph_scene)
         self.setCentralWidget(self.view)
 
-        self.profile_name, self.profile_color = _load_profile()
+        self.profile_name, self.profile_color = self._account_profile()
         self.graph_scene.local_cursor.set_profile(self.profile_name, self.profile_color)
         self._cursor_pos: QPointF | None = None
         self._cursor_dirty = False
@@ -426,6 +409,7 @@ class MainWindow(QMainWindow):
         self.socket.connected.connect(self._on_connected)
         self.socket.disconnected.connect(self._schedule_reconnect)
         self.socket.errorOccurred.connect(self._schedule_reconnect)
+        self.socket.sslErrors.connect(self._on_ssl_errors)
         self.socket.textMessageReceived.connect(self._on_message)
         self.reconnect_timer = QTimer(self, singleShot=True, interval=2000)
         self.reconnect_timer.timeout.connect(self._open_socket)
@@ -478,7 +462,10 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         bar.addWidget(spacer)
+        if self.api.user and self.api.user.get("is_admin"):
+            bar.addAction(self._action("Users", "badge", self.manage_users))
         bar.addAction(self._action("Profile", "account_circle", self.edit_profile))
+        bar.addAction(self._action("Sign out", "visibility_off", self.sign_out))
 
         navigate = [
             self._action("Fit view", "fit_screen", self.fit_view),
@@ -519,22 +506,55 @@ class MainWindow(QMainWindow):
     def _call(self, fn: Callable[..., Any], *args: Any) -> Any:
         try:
             return fn(*args)
+        except AuthError as exc:
+            self._session_lost(str(exc))
+            return None
         except requests.RequestException as exc:
-            message = str(exc)
-            if isinstance(exc, requests.HTTPError) and exc.response is not None:
-                try:
-                    message = str(exc.response.json()["detail"])  # the server explains what was refused
-                except (ValueError, KeyError):
-                    pass
-            self.statusBar().showMessage(f"Request failed: {message}", 6000)
+            self.statusBar().showMessage(f"Request failed: {describe_error(exc)}", 6000)
             return None
 
     # --- live connection -------------------------------------------------
 
     def _open_socket(self) -> None:
-        if self.socket.state() == QAbstractSocket.SocketState.UnconnectedState:
-            self.statusBar().showMessage("Connecting...")
-            self.socket.open(QUrl(self.api.ws_url))
+        if self.socket.state() != QAbstractSocket.SocketState.UnconnectedState:
+            return
+        try:
+            headers = self.api.ws_headers()
+        except AuthError as exc:
+            self._session_lost(str(exc))
+            return
+        except requests.RequestException:
+            self._schedule_reconnect()
+            return
+        self.statusBar().showMessage("Connecting...")
+        request = QNetworkRequest(QUrl(self.api.ws_url))
+        for name, value in headers.items():
+            request.setRawHeader(name.encode(), value.encode())
+        self.socket.open(request)
+
+    def _on_ssl_errors(self, errors: list[Any]) -> None:
+        """A self-signed server is accepted only if its certificate is the one the user pinned."""
+        pin = (self.api.pin or "").replace(":", "").upper()
+        if pin and all(
+            bytes(e.certificate().digest(QCryptographicHash.Algorithm.Sha256).toHex()).decode().upper() == pin
+            for e in errors
+        ):
+            self.socket.ignoreSslErrors()
+
+    def _session_lost(self, reason: str) -> None:
+        self.reconnect_timer.stop()
+        self.cursor_timer.stop()
+        QMessageBox.warning(self, "Signed out", reason)
+        self.close()
+
+    def sign_out(self) -> None:
+        self.reconnect_timer.stop()
+        self.cursor_timer.stop()
+        self.api.logout()
+        self.close()
+
+    def manage_users(self) -> None:
+        UsersDialog(self.api, self).exec()
 
     def _schedule_reconnect(self, *_: Any) -> None:
         self.graph_scene.clear_remote_cursors()
@@ -543,15 +563,15 @@ class MainWindow(QMainWindow):
 
     def _on_connected(self) -> None:
         self.statusBar().showMessage("Live", 3000)
-        self._send_profile()
         self.reload()
 
     def _send(self, message: dict[str, Any]) -> None:
         if self.socket.state() == QAbstractSocket.SocketState.ConnectedState:
             self.socket.sendTextMessage(json.dumps(message))
 
-    def _send_profile(self) -> None:
-        self._send({"event": "profile", "name": self.profile_name, "color": self.profile_color})
+    def _account_profile(self) -> tuple[str, str]:
+        user = self.api.user or {}
+        return str(user.get("display_name", "")), str(user.get("cursor_color", "#888888"))
 
     def _on_cursor_moved(self, x: float, y: float) -> None:
         self._cursor_pos = QPointF(x, y)
@@ -570,13 +590,11 @@ class MainWindow(QMainWindow):
         dialog = ProfileDialog(self, self.profile_name, self.profile_color)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        name = dialog.name_edit.text().strip()
-        if name:
-            self.profile_name = name
-        self.profile_color = dialog.color
-        _save_profile(self.profile_name, self.profile_color)
+        name = dialog.name_edit.text().strip() or self.profile_name
+        if self._call(self.api.update_profile, name, dialog.color) is None:
+            return
+        self.profile_name, self.profile_color = self._account_profile()
         self.graph_scene.local_cursor.set_profile(self.profile_name, self.profile_color)
-        self._send_profile()
 
     def reload(self) -> None:
         graph = self._call(self.api.graph)

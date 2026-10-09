@@ -5,6 +5,14 @@ from sqlalchemy import Table
 from database import Database
 from models.catalogue import CatalogueDEM
 from models.entity import Entity, EntityDEM, Property, PropertyDEM, Relation, RelationDEM
+from models.user import User
+
+
+def migrate_users(db: Database) -> None:
+    """Replace the old users table, which had no logins. Run before the tables are created."""
+    columns = db.table_columns("users")
+    if columns and "username" not in columns:
+        db.drop_table(cast(Table, User.__table__))
 
 
 def migrate(db: Database) -> None:
