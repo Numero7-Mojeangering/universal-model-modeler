@@ -123,8 +123,8 @@ def main():
     if api is None:
         sys.exit(0)
     window = MainWindow(api)
-    window.resize(1200, 800)
-    window.show()
+    window.resize(1200, 800)  # size restored when the window is un-maximized
+    window.showMaximized()
     code = app.exec()
     lock.unlock()
     sys.exit(code)
