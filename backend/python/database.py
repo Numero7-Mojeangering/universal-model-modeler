@@ -1,6 +1,6 @@
 from typing import Any, TypeVar
 
-from sqlalchemy import Table, create_engine, inspect, select
+from sqlalchemy import Table, create_engine, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.schema import AddConstraint
 
@@ -37,6 +37,20 @@ class Database:
     def drop_table(self, table: Table) -> None:
         """Drop a table if it exists."""
         table.drop(self.engine, checkfirst=True)
+
+    def rename_table(self, old: str, new: str) -> None:
+        """Rename a table, keeping its rows and the foreign keys that point to it."""
+        with self.engine.begin() as connection:
+            connection.execute(text(f'ALTER TABLE "{old}" RENAME TO "{new}"'))
+
+    def rename_foreign_key(self, table: str, old: str, new: str) -> None:
+        """Rename a foreign key if the table has it under the old name."""
+        if not inspect(self.engine).has_table(table):
+            return
+        if not any(fk["name"] == old for fk in inspect(self.engine).get_foreign_keys(table)):
+            return
+        with self.engine.begin() as connection:
+            connection.execute(text(f'ALTER TABLE "{table}" RENAME CONSTRAINT "{old}" TO "{new}"'))
 
     def ensure_foreign_key(self, table: Table, name: str) -> None:
         """Add a foreign key declared on the model to a table that already exists."""

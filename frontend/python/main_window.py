@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
         self.api = api
         self.entity_types: list[TypeInfo] = []
         self.relation_types: list[str] = []
-        self.property_names: list[str] = []
+        self.property_types: list[str] = []
         self.setWindowTitle("umm")
 
         self.graph_scene = GraphScene()
@@ -441,7 +441,7 @@ class MainWindow(QMainWindow):
         self.link_action = self._action("Link entities", "link", self._toggle_link_mode, checkable=True)
         add_action = self._action("Add entity", "add", self.add_entity)
         types_action = self._action("Delete types", "delete", self.manage_types)
-        types_action.setToolTip("Delete unused entity types, relation types and property names")
+        types_action.setToolTip("Delete unused entity types, relation types and property types")
         delete_key = self._action("Delete selected", "delete", self.delete_selected)
         delete_key.setShortcut(QKeySequence.StandardKey.Delete)
         self.addAction(delete_key)  # the Delete key still removes the selection; so does the right-click menu
@@ -601,7 +601,7 @@ class MainWindow(QMainWindow):
         if graph is not None:
             self.entity_types = graph["entity_types"]
             self.relation_types = graph["relation_types"]
-            self.property_names = graph["property_names"]
+            self.property_types = graph["property_types"]
             self.graph_scene.set_styles(self.entity_types)
             self.graph_scene.reset(graph)
             self.inspector.show_entity(None, None)
@@ -637,7 +637,7 @@ class MainWindow(QMainWindow):
         elif event == "types.updated":
             self.entity_types = message["entity_types"]
             self.relation_types = message["relation_types"]
-            self.property_names = message["property_names"]
+            self.property_types = message["property_types"]
             scene.set_styles(self.entity_types)
             self._refresh_inspector()
         self._refresh_types()
@@ -719,8 +719,8 @@ class MainWindow(QMainWindow):
         taken = item.info["properties"]
         name = self._ask_type(
             "Add property",
-            [n for n in self.property_names if n not in taken],
-            label="Choose an existing property name or type a new one:",
+            [n for n in self.property_types if n not in taken],
+            label="Choose an existing property type or type a new one:",
         )
         if name is None:
             return
@@ -735,8 +735,8 @@ class MainWindow(QMainWindow):
         self._call(self.api.set_property, entity_id, name, value)
 
     def _rename_property(self, old: str, new: str) -> None:
-        if new in self.property_names:
-            QMessageBox.warning(self, "Rename property", f"A property named '{new}' already exists.")
+        if new in self.property_types:
+            QMessageBox.warning(self, "Rename property", f"A property type named '{new}' already exists.")
             return
         answer = QMessageBox.question(
             self, "Rename property", f"Rename '{old}' to '{new}' on every entity that has it?"

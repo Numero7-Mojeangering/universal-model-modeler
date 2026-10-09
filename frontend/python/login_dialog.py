@@ -12,7 +12,7 @@ MIN_PASSWORD_LENGTH = 10
 
 
 class LoginDialog(QDialog):
-    """Server address, username and password."""
+    """First step: server address and username. The password is asked in the next popup."""
 
     def __init__(self, server: str, username: str, parent: QWidget | None = None):
         super().__init__(parent)
@@ -20,24 +20,20 @@ class LoginDialog(QDialog):
         self.setMinimumWidth(380)
         self.server_edit = QLineEdit(server)
         self.user_edit = QLineEdit(username)
-        self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.error = QLabel()
         self.error.setStyleSheet("color: #c0392b")
         self.error.setWordWrap(True)
         form = QFormLayout()
         form.addRow("Server", self.server_edit)
         form.addRow("Username", self.user_edit)
-        form.addRow("Password", self.password_edit)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Sign in")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(self.error)
         layout.addWidget(buttons)
-        (self.password_edit if username else self.user_edit).setFocus()
+        self.user_edit.setFocus()
 
     @property
     def server(self) -> str:
@@ -47,14 +43,38 @@ class LoginDialog(QDialog):
     def username(self) -> str:
         return self.user_edit.text().strip()
 
+    def show_error(self, message: str) -> None:
+        self.error.setText(message)
+        self.user_edit.setFocus()
+
+
+class PasswordDialog(QDialog):
+    """Second step: the password of an account that already has one."""
+
+    def __init__(self, username: str, error: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle("Password")
+        self.setMinimumWidth(340)
+        self.password_edit = QLineEdit()
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        message = QLabel(error)
+        message.setStyleSheet("color: #c0392b")
+        message.setWordWrap(True)
+        form = QFormLayout()
+        form.addRow(f"Password for '{username}'", self.password_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Sign in")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(message)
+        layout.addWidget(buttons)
+        self.password_edit.setFocus()
+
     @property
     def password(self) -> str:
         return self.password_edit.text()
-
-    def show_error(self, message: str) -> None:
-        self.error.setText(message)
-        self.password_edit.clear()
-        self.password_edit.setFocus()
 
 
 class SetPasswordDialog(QDialog):

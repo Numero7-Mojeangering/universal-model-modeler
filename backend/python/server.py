@@ -72,7 +72,7 @@ def _types() -> JsonDict:
             {"name": s.type_name, "shape": s.shape, "color": s.color} for s in catalogue.entity_types()
         ],
         "relation_types": catalogue.relation_types(),
-        "property_names": catalogue.property_names(),
+        "property_types": catalogue.property_types(),
     }
 
 
@@ -97,7 +97,7 @@ def _usage() -> JsonDict:
             for s in catalogue.entity_types()
         ],
         "relation_types": [{"name": n, "count": relation_counts[n]} for n in catalogue.relation_types()],
-        "property_names": [{"name": n, "count": property_counts[n]} for n in catalogue.property_names()],
+        "property_types": [{"name": n, "count": property_counts[n]} for n in catalogue.property_types()],
     }
 
 
@@ -108,8 +108,8 @@ async def get_catalogue() -> JsonDict:
 
 @api.delete("/catalogue/{kind}/{name:path}", status_code=204)
 async def delete_catalogue_entry(kind: Literal["entity", "relation", "property"], name: str) -> None:
-    """Delete a type or property name that nothing uses any more."""
-    key = {"entity": "entity_types", "relation": "relation_types", "property": "property_names"}[kind]
+    """Delete a type or property type that nothing uses any more."""
+    key = {"entity": "entity_types", "relation": "relation_types", "property": "property_types"}[kind]
     entry = next((e for e in _usage()[key] if e["name"] == name), None)
     if entry is None:
         raise HTTPException(404, f"'{name}' is not in the catalogue")
@@ -118,7 +118,7 @@ async def delete_catalogue_entry(kind: Literal["entity", "relation", "property"]
     remove = {
         "entity": catalogue.remove_entity_type,
         "relation": catalogue.remove_relation_type,
-        "property": catalogue.remove_property_name,
+        "property": catalogue.remove_property_type,
     }[kind]
     remove(name)
     await _publish_types(True)
@@ -173,7 +173,7 @@ async def create_property(entity_id: int, body: PropertyCreate) -> JsonDict:
     _entity_or_404(entity_id)
     if any(p.name == body.name for p in properties.of(entity_id)):
         raise HTTPException(409, f"This entity already has a property named '{body.name}'")
-    await _publish_types(catalogue.add_property_name(body.name))
+    await _publish_types(catalogue.add_property_type(body.name))
     properties.create(entity_id, body.name, body.value)
     return await _publish_entity(entity_id)
 
@@ -186,14 +186,14 @@ async def set_property(entity_id: int, name: str, body: PropertyIn) -> JsonDict:
     return await _publish_entity(entity_id)
 
 
-@api.put("/property-names/{name:path}")
-async def rename_property_name(name: str, body: RenameIn) -> JsonDict:
-    """Rename a property name on every entity that uses it."""
-    if not catalogue.has_property_name(name):
-        raise HTTPException(404, "Property name not found")
-    if body.name != name and catalogue.has_property_name(body.name):
-        raise HTTPException(409, f"A property named '{body.name}' already exists")
-    catalogue.rename_property_name(name, body.name)
+@api.put("/property-types/{name:path}")
+async def rename_property_type(name: str, body: RenameIn) -> JsonDict:
+    """Rename a property type on every entity that uses it."""
+    if not catalogue.has_property_type(name):
+        raise HTTPException(404, "Property type not found")
+    if body.name != name and catalogue.has_property_type(body.name):
+        raise HTTPException(409, f"A property type named '{body.name}' already exists")
+    catalogue.rename_property_type(name, body.name)
     await _publish_types(True)
     for prop in properties.named(body.name):
         await _publish_entity(prop.entity_id)

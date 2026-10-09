@@ -1,11 +1,12 @@
 import sys
+from pathlib import Path
 
 import requests
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QLockFile, QSettings, QStandardPaths
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from api import Api, AuthError, NeedsPassword, UntrustedCertificate, describe_error
-from login_dialog import LoginDialog, SetPasswordDialog
+from login_dialog import LoginDialog, PasswordDialog, SetPasswordDialog
 from main_window import MainWindow
 
 DEFAULT_SERVER = "https://127.0.0.1:8000"
@@ -54,11 +55,35 @@ def ensure_trusted(api: Api, settings: QSettings) -> bool:
             return False
 
 
-def sign_in(settings: QSettings) -> Api | None:
+def authenticate(api: Api, username: str) -> bool:
+    """Ask for the password, or let the user choose a first one. False if the user backs out."""
+    if api.needs_password(username):
+        chooser = SetPasswordDialog(username)
+        if chooser.exec() != QDialog.DialogCode.Accepted:
+            return False
+        api.register(username, chooser.password)
+        api.login(username, chooser.password)
+        return True
+    error = ""
+    while True:
+        prompt = PasswordDialog(username, error)
+        if prompt.exec() != QDialog.DialogCode.Accepted:
+            return False
+        try:
+            api.login(username, prompt.password)
+            return True
+        except NeedsPassword:  # the account was reset meanwhile
+            return authenticate(api, username)
+        except AuthError as exc:
+            error = str(exc)
+
+
+def sign_in(settings: QSettings, owns_session: bool) -> Api | None:
     url = sys.argv[1] if len(sys.argv) > 1 else str(settings.value("server", DEFAULT_SERVER))
     username = str(settings.value("username", ""))
-    if username:  # the secret store may still hold this device's session
+    if username and owns_session:  # the secret store may still hold this device's session
         api = make_api(url, settings)
+        api.persist = True
         try:
             if ensure_trusted(api, settings) and api.restore(username):
                 return api
@@ -67,17 +92,12 @@ def sign_in(settings: QSettings) -> Api | None:
     dialog = LoginDialog(url, username)
     while dialog.exec() == QDialog.DialogCode.Accepted:
         api = make_api(dialog.server, settings)
+        api.persist = owns_session
         if not ensure_trusted(api, settings):
             continue
         try:
-            try:
-                api.login(dialog.username, dialog.password)
-            except NeedsPassword:
-                chooser = SetPasswordDialog(dialog.username)
-                if chooser.exec() != QDialog.DialogCode.Accepted:
-                    continue
-                api.register(dialog.username, chooser.password)
-                api.login(dialog.username, chooser.password)
+            if not authenticate(api, dialog.username):
+                continue
         except (AuthError, requests.RequestException) as exc:
             dialog.show_error(describe_error(exc))
             continue
@@ -87,15 +107,27 @@ def sign_in(settings: QSettings) -> Api | None:
     return None
 
 
+def claim_session_slot() -> QLockFile:
+    """Only the first running client keeps its session in the secret store, so clients never overwrite each other."""
+    folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)) / "umm"
+    folder.mkdir(parents=True, exist_ok=True)
+    lock = QLockFile(str(folder / "session.lock"))
+    lock.tryLock(0)
+    return lock
+
+
 def main():
     app = QApplication(sys.argv)
-    api = sign_in(QSettings("umm", "client"))
+    lock = claim_session_slot()  # held until the program ends
+    api = sign_in(QSettings("umm", "client"), lock.isLocked())
     if api is None:
         sys.exit(0)
     window = MainWindow(api)
     window.resize(1200, 800)
     window.show()
-    sys.exit(app.exec())
+    code = app.exec()
+    lock.unlock()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

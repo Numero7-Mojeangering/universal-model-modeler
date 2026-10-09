@@ -23,7 +23,7 @@ from icons import icon
 KINDS = [
     ("entity", "Entity types", "entities"),
     ("relation", "Relation types", "relations"),
-    ("property", "Property names", "properties"),
+    ("property", "Property types", "properties"),
 ]
 COUNT_ROLE = Qt.ItemDataRole.UserRole + 1
 
@@ -36,7 +36,7 @@ def _bound(fn: Callable[..., object], *args: object) -> Callable[..., None]:
 
 
 class CatalogueDialog(QDialog):
-    """Lists the entity types, relation types and property names; unused ones can be deleted."""
+    """Lists the entity types, relation types and property types; unused ones can be deleted."""
 
     def __init__(self, parent: QWidget, api: Api):
         super().__init__(parent)
@@ -75,7 +75,7 @@ class CatalogueDialog(QDialog):
         groups: dict[str, list[UsageInfo]] = {
             "entity": [*data["entity_types"]],
             "relation": [*data["relation_types"]],
-            "property": [*data["property_names"]],
+            "property": [*data["property_types"]],
         }
         colors = {e["name"]: e["color"] for e in data["entity_types"]}
         for kind, _title, noun in KINDS:

@@ -122,6 +122,7 @@ class Api:
         if pin:
             self.set_pin(pin)
         self.user: dict[str, Any] | None = None
+        self.persist = False  # only one running client may keep the session in the secret store
         self._username = ""
         self._key: Ed25519PrivateKey | None = None
         self._access = ""
@@ -158,7 +159,7 @@ class Api:
         return f"{self.base_url}|{username}"
 
     def _persist(self) -> None:
-        if self._key is None:
+        if not self.persist or self._key is None:
             return
         raw = self._key.private_bytes(
             serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
@@ -170,10 +171,11 @@ class Api:
             pass  # no secret store on this machine: the user signs in again next time
 
     def _forget(self) -> None:
-        try:
-            keyring.delete_password(KEYRING_SERVICE, self._keyring_account(self._username))
-        except KeyringError:
-            pass
+        if self.persist:
+            try:
+                keyring.delete_password(KEYRING_SERVICE, self._keyring_account(self._username))
+            except KeyringError:
+                pass
         self._key, self._access, self._refresh, self.user = None, "", "", None
 
     def _store_tokens(self, data: dict[str, Any]) -> None:
@@ -190,6 +192,11 @@ class Api:
             raise AuthError(_detail(response))
         response.raise_for_status()
         return response.json() if response.content else None
+
+    def needs_password(self, username: str) -> bool:
+        """True if the account exists but its owner has not chosen a password yet."""
+        reply = self._public("/auth/status", {"username": username.strip().lower()})
+        return bool(reply["needs_password"])
 
     def register(self, username: str, password: str) -> None:
         """Choose the first password. The server only receives a value from which it cannot recover it."""
@@ -310,7 +317,7 @@ class Api:
         return cast(Catalogue, self._call("GET", "/catalogue"))
 
     def delete_catalogue_entry(self, kind: str, name: str) -> Any:
-        """Delete an unused entity type, relation type or property name (kind: entity, relation, property)."""
+        """Delete an unused entity type, relation type or property type (kind: entity, relation, property)."""
         return self._call("DELETE", f"/catalogue/{kind}/{quote(name, safe='')}")
 
     def create_entity(self, type: str, x: float, y: float, shape: str, color: str) -> Any:
@@ -333,8 +340,8 @@ class Api:
         return self._call("PUT", f"/entities/{entity_id}/properties/{quote(name, safe='')}", json={"value": value})
 
     def rename_property(self, old: str, new: str) -> Any:
-        """Rename a property name on every entity that has it."""
-        return self._call("PUT", f"/property-names/{quote(old, safe='')}", json={"name": new})
+        """Rename a property type on every entity that has it."""
+        return self._call("PUT", f"/property-types/{quote(old, safe='')}", json={"name": new})
 
     def delete_property(self, entity_id: int, name: str):
         return self._call("DELETE", f"/entities/{entity_id}/properties/{quote(name, safe='')}")

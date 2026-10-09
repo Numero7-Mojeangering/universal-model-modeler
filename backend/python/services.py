@@ -3,7 +3,7 @@ import os
 
 from database import Database
 from hub import Hub
-from migrations import migrate, migrate_users
+from migrations import migrate, migrate_property_types, migrate_users
 from models import layout, session  # noqa: F401  (importing registers the tables)
 from models.session import SessionDEM
 from models.user import UserDEM
@@ -17,6 +17,7 @@ loop: asyncio.AbstractEventLoop | None = None  # the server's event loop, set wh
 
 def init_db() -> None:
     migrate_users(db)
+    migrate_property_types(db)
     db.create_tables()
     migrate(db)
 

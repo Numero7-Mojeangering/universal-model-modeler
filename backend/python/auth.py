@@ -11,6 +11,7 @@ import opaquepy
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from starlette.datastructures import Headers
+from starlette.types import Scope
 
 from accounts import password_record, revoke_sessions
 from hub import UNAUTHORIZED_CLOSE_CODE
@@ -23,6 +24,7 @@ from schemas import (
     ProfilePatch,
     RegisterFinish,
     RegisterStart,
+    StatusRequest,
     UserCreate,
     UserPatch,
     user_dict,
@@ -61,7 +63,7 @@ class Auth:
     session: DeviceSession
 
 
-def request_target(scope: dict) -> str:
+def request_target(scope: Scope) -> str:
     """Path and query exactly as the client sent them; the client signs the same string."""
     path = (scope.get("raw_path") or scope["path"].encode()).decode("latin-1")
     query = scope.get("query_string", b"").decode("latin-1")
@@ -170,6 +172,13 @@ def _awaiting_password(username: str) -> User:
 
 
 public = APIRouter(prefix="/auth", dependencies=[Depends(limit_by_ip)])
+
+
+@public.post("/status")
+async def status(body: StatusRequest) -> JsonDict:
+    """Tells the client whether to ask for a password or to let the user choose a first one."""
+    user = users.by_username(body.username)
+    return {"needs_password": user is not None and not user.disabled and user.opaque_record is None}
 
 
 @public.post("/register/start")

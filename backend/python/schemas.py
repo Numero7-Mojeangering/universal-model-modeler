@@ -20,6 +20,10 @@ DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length
 Blob = Annotated[str, StringConstraints(max_length=4096)]  # a base64 protocol message
 
 
+class StatusRequest(BaseModel):
+    username: Username
+
+
 class LoginStart(BaseModel):
     username: Username
     request: Blob
