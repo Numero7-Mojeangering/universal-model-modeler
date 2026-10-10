@@ -2,286 +2,37 @@ import math
 import time
 from typing import Any
 
-from PySide6.QtCore import QLineF, QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QLineF,
+    QPoint,
+    QPointF,
+    QRect,
+    QRectF,
+    Qt,
+    QTimer,
+    Signal
+)
 from PySide6.QtGui import (
     QColor,
     QFont,
-    QFontMetricsF,
     QPainter,
-    QPainterPath,
-    QPainterPathStroker,
     QPen,
-    QPolygonF,
-    QTextOption,
     QTransform,
 )
 from PySide6.QtWidgets import (
-    QGraphicsItem,
     QGraphicsScene,
     QGraphicsSceneContextMenuEvent,
     QGraphicsSceneMouseEvent,
-    QStyleOptionGraphicsItem,
-    QWidget,
+    QGraphicsItem,
 )
+
 from shiboken6 import isValid
 
 from data import EntityInfo, Graph, PresenceInfo, RelationInfo, TypeInfo
 
-SHAPES = ["box", "circle", "triangle", "hexagon", "diamond"]
-PAD = 12
-
-
-def _outer(shape: str, tw: float, th: float) -> tuple[float, float, float]:
-    """Return (width, height, text centre y) of a shape that fits a text block."""
-    if shape == "circle":
-        d = math.hypot(tw, th) + PAD
-        return d, d, 0
-    if shape == "diamond":
-        return 2 * (tw + PAD), 2 * (th + PAD), 0
-    if shape == "hexagon":
-        return 1.8 * tw + 4 * PAD, th + 2 * PAD, 0
-    if shape == "triangle":
-        h = 2 * th + 30
-        return 2 * tw + 30, h, h / 2 - 8 - th / 2
-    return tw + 2 * PAD, th + 2 * PAD, 0
-
-
-def _edge(item: QGraphicsItem, direction: QPointF) -> QPointF:
-    """Scene point where a ray from the item's centre leaves its shape."""
-    length = math.hypot(direction.x(), direction.y())
-    if length == 0:
-        return item.pos()
-    d = QPointF(direction.x() / length, direction.y() / length)
-    shape = item.shape()
-    lo, hi = 0.0, max(item.boundingRect().width(), item.boundingRect().height())
-    for _ in range(14):
-        mid = (lo + hi) / 2
-        if shape.contains(QPointF(d.x() * mid, d.y() * mid)):
-            lo = mid
-        else:
-            hi = mid
-    return item.pos() + d * hi
-
-
-class EntityItem(QGraphicsItem):
-    """An entity drawn as a shape with its type and properties inside."""
-
-    def __init__(self, info: EntityInfo, style: TypeInfo):
-        super().__init__()
-        self.entity_id = info["id"]
-        self.relations: list[RelationItem] = []
-        self.saved_pos = QPointF()
-        self.setFlags(
-            QGraphicsItem.GraphicsItemFlag.ItemIsMovable
-            | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
-            | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
-        )
-        self.setZValue(1)
-        self.update_info(info, style)
-
-    def update_info(self, info: EntityInfo, style: TypeInfo) -> None:
-        self.info = info
-        self.shape_name = style["shape"]
-        self.fill = QColor(style["color"])
-        self.lines = [info["type"]] + [f"{k}: {v if v is not None else ''}" for k, v in info["properties"].items()]
-        self.prepareGeometryChange()
-        self._measure()
-        self.update()
-        for relation in self.relations:
-            relation.refresh()
-
-    def _measure(self) -> None:
-        title_font = QFont()
-        title_font.setBold(True)
-        title_metrics = QFontMetricsF(title_font)
-        body_metrics = QFontMetricsF(QFont())
-        self._line_height = body_metrics.height()
-        widths = [title_metrics.horizontalAdvance(self.lines[0])]
-        widths += [body_metrics.horizontalAdvance(line) for line in self.lines[1:]]
-        self._text_w = max(max(widths), 60.0)
-        self._text_h = self._line_height * len(self.lines)
-        w, h, self._text_cy = _outer(self.shape_name, self._text_w, self._text_h)
-        self._size = (w, h)
-        self._path = self._build_path(w, h)
-
-    def _build_path(self, w: float, h: float) -> QPainterPath:
-        path = QPainterPath()
-        if self.shape_name == "circle":
-            path.addEllipse(QRectF(-w / 2, -h / 2, w, h))
-            return path
-        if self.shape_name == "box":
-            path.addRoundedRect(QRectF(-w / 2, -h / 2, w, h), 8, 8)
-            return path
-        points = {
-            "diamond": [(0, -h / 2), (w / 2, 0), (0, h / 2), (-w / 2, 0)],
-            "hexagon": [(-w / 2, 0), (-w / 4, -h / 2), (w / 4, -h / 2), (w / 2, 0), (w / 4, h / 2), (-w / 4, h / 2)],
-            "triangle": [(0, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)],
-        }[self.shape_name]
-        path.addPolygon(QPolygonF([QPointF(x, y) for x, y in points]))
-        path.closeSubpath()
-        return path
-
-    def boundingRect(self) -> QRectF:
-        w, h = self._size
-        return QRectF(-w / 2 - 6, -h / 2 - 6, w + 12, h + 12)
-
-    def shape(self) -> QPainterPath:
-        return self._path
-
-    def paint(
-        self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
-    ) -> None:
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        selected = self.isSelected()
-        painter.setPen(QPen(QColor("#1e6fd9") if selected else QColor("#444"), 2.5 if selected else 1.5))
-        painter.setBrush(self.fill)
-        painter.drawPath(self._path)
-        text_color = QColor("#222") if self.fill.lightness() > 140 else QColor("white")
-        top = self._text_cy - self._text_h / 2
-        for i, line in enumerate(self.lines):
-            font = QFont()
-            font.setBold(i == 0)
-            painter.setFont(font)
-            painter.setPen(text_color)
-            rect = QRectF(-self._text_w / 2, top + i * self._line_height, self._text_w, self._line_height)
-            align = Qt.AlignmentFlag.AlignHCenter if i == 0 else Qt.AlignmentFlag.AlignLeft
-            painter.drawText(rect, line, QTextOption(align | Qt.AlignmentFlag.AlignVCenter))
-
-    def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-            for relation in self.relations:
-                relation.refresh()
-        return super().itemChange(change, value)
-
-
-class RelationItem(QGraphicsItem):
-    """A relation drawn as an arrow from its source entity to its target entity."""
-
-    def __init__(self, info: RelationInfo, source: EntityItem, target: EntityItem):
-        super().__init__()
-        self.info = info
-        self.source = source
-        self.target = target
-        self._path = QPainterPath()
-        self._arrow = QPolygonF()
-        self._label_rect = QRectF()
-        source.relations.append(self)
-        if target is not source:
-            target.relations.append(self)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
-        self.refresh()
-
-    @property
-    def key(self) -> tuple[int, int, str]:
-        return (self.info["source_id"], self.info["target_id"], self.info["type"])
-
-    def detach(self) -> None:
-        for item in {self.source, self.target}:
-            if self in item.relations:
-                item.relations.remove(self)
-
-    def refresh(self) -> None:
-        self.prepareGeometryChange()
-        path = QPainterPath()
-        if self.source is self.target:
-            start = _edge(self.source, QPointF(1, -1))
-            end = _edge(self.source, QPointF(-1, -1))
-            c1, c2 = start + QPointF(40, -80), end + QPointF(-40, -80)
-            path.moveTo(start)
-            path.cubicTo(c1, c2, end)
-            heading = end - c2
-        else:
-            start = _edge(self.source, self.target.pos() - self.source.pos())
-            end = _edge(self.target, self.source.pos() - self.target.pos())
-            path.moveTo(start)
-            path.lineTo(end)
-            heading = end - start
-        angle = math.atan2(heading.y(), heading.x())
-        wing = [end - QPointF(math.cos(angle + s) * 12, math.sin(angle + s) * 12) for s in (-math.pi / 6, math.pi / 6)]
-        self._arrow = QPolygonF([end, wing[0], wing[1]])
-        self._path = path
-        metrics = QFontMetricsF(QFont())
-        w, h = metrics.horizontalAdvance(self.info["type"]), metrics.height()
-        mid = path.pointAtPercent(0.5)
-        self._label_rect = QRectF(mid.x() - w / 2 - 3, mid.y() - h / 2, w + 6, h)
-        self.update()
-
-    def boundingRect(self) -> QRectF:
-        rect = self._path.boundingRect().united(self._label_rect).united(self._arrow.boundingRect())
-        return rect.adjusted(-10, -10, 10, 10)
-
-    def shape(self) -> QPainterPath:
-        stroker = QPainterPathStroker()
-        stroker.setWidth(12)
-        clickable = stroker.createStroke(self._path)
-        clickable.addRect(self._label_rect)
-        return clickable
-
-    def paint(
-        self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
-    ) -> None:
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        selected = self.isSelected()
-        color = QColor("#1e6fd9") if selected else QColor("#555")
-        painter.setPen(QPen(color, 2.2 if selected else 1.4))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(self._path)
-        painter.setBrush(color)
-        painter.drawPolygon(self._arrow)
-        painter.setBrush(QColor("#f4f4f4"))
-        painter.setPen(QPen(color, 1))
-        painter.drawRect(self._label_rect)
-        painter.setPen(QColor("#222"))
-        painter.drawText(self._label_rect, self.info["type"], QTextOption(Qt.AlignmentFlag.AlignCenter))
-
-
-class CursorItem(QGraphicsItem):
-    """A user's cursor: a flat-coloured pointer with a name tag, constant size on screen."""
-
-    def __init__(self, name: str, color: str):
-        super().__init__()
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
-        self.setZValue(1000)
-        self._show_name = True
-        self.placed = False  # set once the first position is known
-        self.set_profile(name, color)
-
-    def set_name_visible(self, visible: bool) -> None:
-        self.prepareGeometryChange()
-        self._show_name = visible
-        self.update()
-
-    def set_profile(self, name: str, color: str) -> None:
-        self.prepareGeometryChange()
-        self.user_name = name
-        self.user_color = QColor(color)
-        metrics = QFontMetricsF(QFont())
-        self._label = QRectF(14, 16, metrics.horizontalAdvance(name) + 10, metrics.height() + 4)
-        self.update()
-
-    def boundingRect(self) -> QRectF:
-        if not self._show_name:
-            return QRectF(-2, -2, 20, 26)
-        return QRectF(-2, -2, max(20.0, self._label.right() + 4), self._label.bottom() + 4)
-
-    def shape(self) -> QPainterPath:
-        return QPainterPath()  # never picked by clicks
-
-    def paint(
-        self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
-    ) -> None:
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        points = [(0, 0), (0, 17), (4.5, 13), (8.5, 21), (11.5, 19.5), (7.5, 12), (13, 12)]
-        painter.setPen(QPen(QColor("white"), 1.5))
-        painter.setBrush(self.user_color)
-        painter.drawPolygon(QPolygonF([QPointF(x, y) for x, y in points]))
-        if not self.user_name or not self._show_name:
-            return
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self._label, 4, 4)
-        painter.setPen(QColor("black") if self.user_color.lightness() > 150 else QColor("white"))
-        painter.drawText(self._label, self.user_name, QTextOption(Qt.AlignmentFlag.AlignCenter))
-
+from qt.qgraphicsitem.entity_item import EntityItem
+from qt.qgraphicsitem.relation_item import RelationItem
+from qt.qgraphicsitem.cursor_item import CursorItem
 
 class GraphScene(QGraphicsScene):
     """Holds the entity and relation items and keeps them in sync with the backend data."""
@@ -293,7 +44,7 @@ class GraphScene(QGraphicsScene):
     def __init__(self):
         super().__init__()
         self.entities: dict[int, EntityItem] = {}
-        self.relations: dict[tuple, RelationItem] = {}
+        self.relations: dict[Any, RelationItem] = {}
         self.cursors: dict[int, CursorItem] = {}
         self._targets: dict[int, QPointF] = {}  # where each remote cursor is gliding to
         self._glide = QTimer(self, interval=16)
@@ -327,7 +78,7 @@ class GraphScene(QGraphicsScene):
         self.grid_visible = visible
         self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.BackgroundLayer)
 
-    def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
+    def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
         painter.fillRect(rect, QColor("#f4f4f4"))
         if not self.grid_visible:
             return
@@ -356,7 +107,7 @@ class GraphScene(QGraphicsScene):
                     )
 
     def reset(self, graph: Graph) -> None:
-        old_items = [*self.relations.values(), *self.entities.values()]
+        old_items: list[QGraphicsItem] = [*self.relations.values(), *self.entities.values()]
         self.entities.clear()  # emptied first: removing items can trigger view callbacks that read them
         self.relations.clear()
         for item in old_items:
@@ -411,7 +162,8 @@ class GraphScene(QGraphicsScene):
     def content_rect(self) -> QRectF:
         """Bounds of the entities and relations, without the cursors."""
         rect = QRectF()
-        for item in [*self.entities.values(), *self.relations.values()]:
+        l: list[QGraphicsItem] = [*self.entities.values(), *self.relations.values()]
+        for item in l:
             if isValid(item):  # on shutdown the scene deletes its items before the view stops asking
                 rect = rect.united(item.sceneBoundingRect())
         return rect

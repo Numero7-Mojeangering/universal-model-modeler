@@ -13,9 +13,8 @@ from PySide6.QtWidgets import (
 )
 
 from data import EntityInfo, TypeInfo
-from ..common import InspectorKey
-from ..scene import SHAPES
-
+from ..helper.slot import InspectorKey
+from qt.helper.graphics import GraphicsHelper
 
 class Inspector(QWidget):
     """Edits the type, its style and the properties of the selected entity."""
@@ -39,7 +38,7 @@ class Inspector(QWidget):
         self.type_box.setEditable(True)
         self.type_box.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.shape_box = QComboBox()
-        self.shape_box.addItems(SHAPES)
+        self.shape_box.addItems(GraphicsHelper.SHAPES)
         self.color_button = QPushButton("Color")
         self.table = QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(["Type", "Value"])

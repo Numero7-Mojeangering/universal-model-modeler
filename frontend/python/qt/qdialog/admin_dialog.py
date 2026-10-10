@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from api import Api, AuthError, describe_error
-from ..common import slot_ignore_checked
+from qt.helper.slot import slot_ignore_checked
 
 class UsersDialog(QDialog):
     """Administrators create and manage accounts here."""

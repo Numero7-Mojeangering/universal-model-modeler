@@ -25,12 +25,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .common import slot_ignore_checked
+from qt.helper.slot import slot_ignore_checked
 
 from api import Api, AuthError, describe_error
 from data import EntityInfo, TypeInfo
 
-from .scene import SHAPES, EntityItem, GraphScene, RelationItem
+from qt.scene import EntityItem, GraphScene, RelationItem
+from qt.helper.graphics import GraphicsHelper
 from .icons import icon
 from .qwidget.inspector import Inspector
 from .graph_view import GraphView
@@ -359,7 +360,7 @@ class MainWindow(QMainWindow):
         known = self.graph_scene.styles.get(type_)
         if known is not None:
             return known["shape"], known["color"]
-        shape, ok = QInputDialog.getItem(self, "New type", f"Shape for '{type_}':", SHAPES, 0, False)
+        shape, ok = QInputDialog.getItem(self, "New type", f"Shape for '{type_}':", GraphicsHelper.SHAPES, 0, False)
         if not ok:
             return None
         color = QColorDialog.getColor(QColor("#fffbe6"), self, f"Color for '{type_}'")
@@ -478,8 +479,8 @@ class MainWindow(QMainWindow):
             menu.addAction("Edit type...", slot_ignore_checked(self._edit_type, item.entity_id))
             menu.addAction("Add property...", slot_ignore_checked(self.add_property, item.entity_id))
             shapes = menu.addMenu("Type shape")
-            for shape in SHAPES:
-                shapes.addAction(shape, slot_ignore_checked(self._change_style, item.info["type"], shape))
+            for shape in GraphicsHelper.SHAPES:
+                shapes.addAction(shape, slot_ignore_checked(self._change_style, item.info["type"], GraphicsHelper.SHAPES))
             menu.addAction("Type color...", slot_ignore_checked(self._pick_color, item.info["type"]))
             menu.addSeparator()
             menu.addAction("Delete entity", slot_ignore_checked(self.delete_selected))
