@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from api import Api, AuthError, describe_error
-
+from ..common import slot_ignore_checked
 
 class UsersDialog(QDialog):
     """Administrators create and manage accounts here."""
@@ -41,7 +41,7 @@ class UsersDialog(QDialog):
             ("Delete", self._delete),
         ]:
             button = QPushButton(text)
-            button.clicked.connect(lambda _checked=False, fn=slot: fn())
+            button.clicked.connect(slot_ignore_checked(slot))
             buttons.addWidget(button)
         layout = QVBoxLayout(self)
         layout.addWidget(self.table)

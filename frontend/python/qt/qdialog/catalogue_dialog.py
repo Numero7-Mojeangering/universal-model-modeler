@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from api import Api
 from data import UsageInfo
-from icons import icon
+from ..icons import icon
 
 # kind (as the server names it), tab title, what the count counts
 KINDS = [
@@ -100,18 +100,12 @@ class CatalogueDialog(QDialog):
     def _sync_button(self, kind: str) -> None:
         item = self.lists[kind].currentItem()
         button = self.buttons[kind]
-        if item is None:
-            button.setEnabled(False)
-            button.setToolTip("")
-            return
         count = int(item.data(COUNT_ROLE))
         button.setEnabled(count == 0)
         button.setToolTip("" if count == 0 else f"Still used {count} time(s): remove those first")
 
     def _delete(self, kind: str) -> None:
         item = self.lists[kind].currentItem()
-        if item is None:
-            return
         try:
             self.api.delete_catalogue_entry(kind, str(item.data(Qt.ItemDataRole.UserRole)))
         except requests.HTTPError as exc:

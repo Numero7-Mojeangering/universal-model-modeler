@@ -6,8 +6,8 @@ from PySide6.QtCore import QLockFile, QSettings, QStandardPaths
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from api import Api, AuthError, NeedsPassword, UntrustedCertificate, describe_error
-from login_dialog import LoginDialog, PasswordDialog, SetPasswordDialog
-from main_window import MainWindow
+from qt.qdialog.login_dialog import LoginDialog, PasswordDialog, SetPasswordDialog
+from qt.main_window import MainWindow
 
 DEFAULT_SERVER = "https://127.0.0.1:8000"
 
