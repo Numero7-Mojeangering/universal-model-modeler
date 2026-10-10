@@ -240,7 +240,7 @@ class Inspector(QWidget):
         self.shape_box.addItems(SHAPES)
         self.color_button = QPushButton("Color")
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["Name", "Value"])
+        self.table.setHorizontalHeaderLabels(["Type", "Value"])
         self.table.horizontalHeader().setStretchLastSection(True)
         add_button, remove_button = QPushButton("Add property"), QPushButton("Remove property")
 
@@ -398,9 +398,9 @@ class MainWindow(QMainWindow):
         self._cursor_pos: QPointF | None = None
         self._cursor_dirty = False
         self.inspector = Inspector()
-        dock = QDockWidget("Inspector", self)
-        dock.setWidget(self.inspector)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self.inspector_dock = QDockWidget("Inspector", self)
+        self.inspector_dock.setWidget(self.inspector)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.inspector_dock)
 
         self._build_toolbar()
         self._connect_signals()
@@ -445,8 +445,12 @@ class MainWindow(QMainWindow):
         delete_key = self._action("Delete selected", "delete", self.delete_selected)
         delete_key.setShortcut(QKeySequence.StandardKey.Delete)
         self.addAction(delete_key)  # the Delete key still removes the selection; so does the right-click menu
+        reset_layout = self._action("Reset layout", "refresh", self.reset_layout)
+        reset_layout.setShortcut(QKeySequence(Qt.Key.Key_F1))
+        self.addAction(reset_layout)
 
-        bar = QToolBar("Tools")
+        bar = QToolBar("Toolbar")
+        self.toolbar = bar
         bar.setMovable(False)
         bar.setIconSize(QSize(28, 28))
         bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -555,6 +559,14 @@ class MainWindow(QMainWindow):
 
     def manage_users(self) -> None:
         UsersDialog(self.api, self).exec()
+
+    def reset_layout(self) -> None:
+        """F1: bring back the toolbar and the inspector if they were closed or moved."""
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolbar)
+        self.toolbar.show()
+        self.inspector_dock.setFloating(False)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.inspector_dock)
+        self.inspector_dock.show()
 
     def _schedule_reconnect(self, *_: Any) -> None:
         self.graph_scene.clear_remote_cursors()
