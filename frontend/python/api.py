@@ -94,6 +94,10 @@ class _PinnedAdapter(HTTPAdapter):
         kwargs["assert_fingerprint"] = self._fingerprint
         super().init_poolmanager(*args, **kwargs)
 
+    def proxy_manager_for(self, proxy: str, **proxy_kwargs: Any) -> Any:
+        proxy_kwargs["assert_fingerprint"] = self._fingerprint
+        return super().proxy_manager_for(proxy, **proxy_kwargs)
+
 
 def _detail(response: requests.Response) -> str:
     try:
