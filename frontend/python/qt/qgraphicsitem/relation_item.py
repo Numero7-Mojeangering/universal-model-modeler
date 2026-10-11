@@ -12,7 +12,6 @@ from PySide6.QtGui import (
     QPainterPathStroker,
     QPen,
     QPolygonF,
-    QTextOption
 )
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -39,6 +38,14 @@ class RelationItem(QGraphicsItem):
         self._path = QPainterPath()
         self._arrow = QPolygonF()
         self._label_rect = QRectF()
+        self._normal_color = QColor("#555")
+        self._selected_color = QColor("#1e6fd9")
+        self._label_fill = QColor("#f4f4f4")
+        self._text_color = QColor("#222")
+        self._normal_pen = QPen(self._normal_color, 1.4)
+        self._selected_pen = QPen(self._selected_color, 2.2)
+        self._normal_label_pen = QPen(self._normal_color, 1)
+        self._selected_label_pen = QPen(self._selected_color, 1)
         source.relations.append(self)
         if target is not source:
             target.relations.append(self)
@@ -96,14 +103,14 @@ class RelationItem(QGraphicsItem):
     ) -> None:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         selected = self.isSelected()
-        color = QColor("#1e6fd9") if selected else QColor("#555")
-        painter.setPen(QPen(color, 2.2 if selected else 1.4))
+        color = self._selected_color if selected else self._normal_color
+        painter.setPen(self._selected_pen if selected else self._normal_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(self._path)
         painter.setBrush(color)
         painter.drawPolygon(self._arrow)
-        painter.setBrush(QColor("#f4f4f4"))
-        painter.setPen(QPen(color, 1))
+        painter.setBrush(self._label_fill)
+        painter.setPen(self._selected_label_pen if selected else self._normal_label_pen)
         painter.drawRect(self._label_rect)
-        painter.setPen(QColor("#222"))
-        painter.drawText(self._label_rect, self.info["type"], QTextOption(Qt.AlignmentFlag.AlignCenter))
+        painter.setPen(self._text_color)
+        painter.drawText(self._label_rect, Qt.AlignmentFlag.AlignCenter, self.info["type"])
