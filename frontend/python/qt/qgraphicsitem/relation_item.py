@@ -51,6 +51,8 @@ class RelationItem(QGraphicsItem):
         self._normal_brush = QBrush(self._normal_color)
         self._selected_brush = QBrush(self._selected_color)
         self._label_brush = QBrush(self._label_fill)
+        self._no_brush = QBrush()
+        self._center_flags = int(Qt.AlignmentFlag.AlignCenter)
         source.relations.append(self)
         if target is not source:
             target.relations.append(self)
@@ -106,10 +108,9 @@ class RelationItem(QGraphicsItem):
     def paint(
         self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
     ) -> None:
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         selected = self.isSelected()
         painter.setPen(self._selected_pen if selected else self._normal_pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setBrush(self._no_brush)
         painter.drawPath(self._path)
         painter.setBrush(self._selected_brush if selected else self._normal_brush)
         painter.drawPolygon(self._arrow)
@@ -117,4 +118,4 @@ class RelationItem(QGraphicsItem):
         painter.setPen(self._selected_label_pen if selected else self._normal_label_pen)
         painter.drawRect(self._label_rect)
         painter.setPen(self._text_pen)
-        painter.drawText(self._label_rect, Qt.AlignmentFlag.AlignCenter, self.info["type"])
+        painter.drawText(self._label_rect, self._center_flags, self.info["type"])

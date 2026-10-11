@@ -73,12 +73,12 @@ class EntityItem(QGraphicsItem):
         self._size = (w, h)
         self._path = self._build_path(w, h)
         top = self._text_cy - self._text_h / 2
-        self._text_lines: list[tuple[QFont, QRectF, Qt.AlignmentFlag, str]] = []
+        self._text_lines: list[tuple[QFont, QRectF, int, str]] = []
         for i, line in enumerate(self.lines):
             font = self._title_font if i == 0 else self._body_font
             rect = QRectF(-self._text_w / 2, top + i * self._line_height, self._text_w, self._line_height)
             align = Qt.AlignmentFlag.AlignHCenter if i == 0 else Qt.AlignmentFlag.AlignLeft
-            self._text_lines.append((font, rect, align | Qt.AlignmentFlag.AlignVCenter, line))
+            self._text_lines.append((font, rect, int(align | Qt.AlignmentFlag.AlignVCenter), line))
 
     def _build_path(self, w: float, h: float) -> QPainterPath:
         path = QPainterPath()
@@ -110,7 +110,6 @@ class EntityItem(QGraphicsItem):
     def paint(
         self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
     ) -> None:
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(self._selected_pen if self.isSelected() else self._outline_pen)
         painter.setBrush(self._fill_brush)
         painter.drawPath(self._path)

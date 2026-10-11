@@ -29,6 +29,7 @@ class CursorItem(QGraphicsItem):
         self._show_name = True
         self.placed = False  # set once the first position is known
         self._font = QFont()
+        self._center_flags = int(Qt.AlignmentFlag.AlignCenter)
         self._arrow = QPolygonF([QPointF(x * self.CURSOR_SCALE, y * self.CURSOR_SCALE) for x, y in self._ARROW_POINTS])
         self.set_profile(name, color)
 
@@ -60,11 +61,10 @@ class CursorItem(QGraphicsItem):
         self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
     ) -> None:
         """Paint the cursor and its name tag."""
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(self._pen)
         painter.setBrush(self._body_brush)
         painter.drawPolygon(self._arrow)
 
         if self.user_name and self._show_name:
             painter.drawRoundedRect(self._label, 4, 4)
-            painter.drawText(self._label, Qt.AlignmentFlag.AlignCenter, self.user_name)
+            painter.drawText(self._label, self._center_flags, self.user_name)

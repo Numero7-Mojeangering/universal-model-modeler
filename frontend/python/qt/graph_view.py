@@ -30,6 +30,7 @@ class GraphView(QGraphicsView):
         self.graph_scene = scene
         self.setMouseTracking(True)
         self.viewport().setCursor(Qt.CursorShape.BlankCursor)  # the scene draws our own cursor
+        # Items inherit this hint, so paint() must not set it again.
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         # Partial updates left trails behind moving items.
