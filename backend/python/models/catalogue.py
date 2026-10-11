@@ -21,15 +21,15 @@ class RelationType(Base):
     name: Mapped[str] = mapped_column(Text, primary_key=True)
 
 
-class PropertyName(Base):
-    """Catalogue of the property names; renaming one renames it on every entity."""
+class PropertyType(Base):
+    """Catalogue of the property types; renaming one renames it on every entity."""
 
-    __tablename__ = "property_name"
+    __tablename__ = "property_type"
 
     name: Mapped[str] = mapped_column(Text, primary_key=True)
 
 
-NameRow = EntityType | RelationType | PropertyName
+NameRow = EntityType | RelationType | PropertyType
 
 
 DEFAULT_SHAPE = "box"
@@ -90,19 +90,19 @@ class CatalogueDEM:
         """Register the type; return True only if it was new."""
         return self._add(RelationType, RelationType(name=name), name)
 
-    def property_names(self) -> list[str]:
-        return sorted(n.name for n in self.db.get_all(PropertyName))
+    def property_types(self) -> list[str]:
+        return sorted(n.name for n in self.db.get_all(PropertyType))
 
-    def has_property_name(self, name: str) -> bool:
-        return self.db.get(PropertyName, name) is not None
+    def has_property_type(self, name: str) -> bool:
+        return self.db.get(PropertyType, name) is not None
 
-    def add_property_name(self, name: str) -> bool:
-        """Register the name; return True only if it was new."""
-        return self._add(PropertyName, PropertyName(name=name), name)
+    def add_property_type(self, name: str) -> bool:
+        """Register the type; return True only if it was new."""
+        return self._add(PropertyType, PropertyType(name=name), name)
 
-    def rename_property_name(self, old: str, new: str) -> bool:
-        """Rename the name everywhere (the foreign key cascades); False if `old` is unknown."""
-        return self.db.rename_key(PropertyName, old, "name", new)
+    def rename_property_type(self, old: str, new: str) -> bool:
+        """Rename the type everywhere (the foreign key cascades); False if `old` is unknown."""
+        return self.db.rename_key(PropertyType, old, "name", new)
 
     def remove_entity_type(self, name: str) -> bool:
         """Delete an unused type with its style (cascade); fails while entities use it."""
@@ -111,8 +111,8 @@ class CatalogueDEM:
     def remove_relation_type(self, name: str) -> bool:
         return self._remove(RelationType, name)
 
-    def remove_property_name(self, name: str) -> bool:
-        return self._remove(PropertyName, name)
+    def remove_property_type(self, name: str) -> bool:
+        return self._remove(PropertyType, name)
 
     def _remove(self, model: type[NameRow], name: str) -> bool:
         row = self.db.get(model, name)

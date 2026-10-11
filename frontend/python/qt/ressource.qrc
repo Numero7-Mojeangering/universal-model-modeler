@@ -1,0 +1,17 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="account_circle.svg">assets/icons/account_circle.svg</file>
+        <file alias="add.svg">assets/icons/add.svg</file>
+        <file alias="badge.svg">assets/icons/badge.svg</file>
+        <file alias="delete.svg">assets/icons/delete.svg</file>
+        <file alias="expand_less.svg">assets/icons/expand_less.svg</file>
+        <file alias="expand_more.svg">assets/icons/expand_more.svg</file>
+        <file alias="fit_screen.svg">assets/icons/fit_screen.svg</file>
+        <file alias="grid_on.svg">assets/icons/grid_on.svg</file>
+        <file alias="link.svg">assets/icons/link.svg</file>
+        <file alias="more_vert.svg">assets/icons/more_vert.svg</file>
+        <file alias="refresh.svg">assets/icons/refresh.svg</file>
+        <file alias="visibility.svg">assets/icons/visibility.svg</file>
+        <file alias="visibility_off.svg">assets/icons/visibility_off.svg</file>
+    </qresource>
+</RCC>

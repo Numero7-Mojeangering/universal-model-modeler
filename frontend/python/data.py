@@ -41,7 +41,7 @@ class Graph(TypedDict):
     relations: list[RelationInfo]
     entity_types: list[TypeInfo]
     relation_types: list[str]
-    property_names: list[str]
+    property_types: list[str]
 
 
 class UsageInfo(TypedDict):
@@ -61,4 +61,4 @@ class EntityTypeUsage(TypedDict):
 class Catalogue(TypedDict):
     entity_types: list[EntityTypeUsage]
     relation_types: list[UsageInfo]
-    property_names: list[UsageInfo]
+    property_types: list[UsageInfo]

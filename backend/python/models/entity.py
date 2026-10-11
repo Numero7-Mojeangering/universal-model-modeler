@@ -2,7 +2,7 @@ from sqlalchemy import BigInteger, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base, Database
-from models.catalogue import EntityType, PropertyName, RelationType
+from models.catalogue import EntityType, PropertyType, RelationType
 
 
 class Entity(Base):
@@ -23,7 +23,7 @@ class Property(Base):
     )
     # One value per name per entity, so (entity_id, name) is the key.
     name: Mapped[str] = mapped_column(
-        Text, ForeignKey(PropertyName.name, name="property_name_fk", onupdate="CASCADE"), primary_key=True
+        Text, ForeignKey(PropertyType.name, name="property_type_fk", onupdate="CASCADE"), primary_key=True
     )
     value: Mapped[str | None] = mapped_column(Text)
 
