@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
             menu.addAction("Add property...", slot_ignore_checked(self.add_property, item.entity_id))
             shapes = menu.addMenu("Type shape")
             for shape in GraphicsHelper.SHAPES:
-                shapes.addAction(shape, slot_ignore_checked(self._change_style, item.info["type"], GraphicsHelper.SHAPES))
+                shapes.addAction(shape, slot_ignore_checked(self._change_style, item.info["type"], shape))
             menu.addAction("Type color...", slot_ignore_checked(self._pick_color, item.info["type"]))
             menu.addSeparator()
             menu.addAction("Delete entity", slot_ignore_checked(self.delete_selected))
