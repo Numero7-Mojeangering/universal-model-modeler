@@ -3,6 +3,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base, Database
 
+USE_ME = "being in used" # Used to remove unused import warning
 
 class EntityLayout(Base):
     """Display data only (position); kept apart from the entity model.

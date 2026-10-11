@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base, Database
 from models.user import utcnow
 
+USE_ME = "being in used" # Used to remove unused import warning
 
 class DeviceSession(Base):
     """One login on one device. Its tokens only work together with the device's private key."""

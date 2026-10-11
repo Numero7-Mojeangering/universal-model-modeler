@@ -8,6 +8,9 @@ from models import layout, session  # noqa: F401  (importing registers the table
 from models.session import SessionDEM
 from models.user import UserDEM
 
+layout.USE_ME
+session.USE_ME
+
 db = Database(os.environ.get("DATABASE_URL", "postgresql+psycopg://postgres:password@localhost:5432/postgres"))
 users = UserDEM(db)
 sessions = SessionDEM(db)
