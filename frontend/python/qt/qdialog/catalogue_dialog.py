@@ -100,6 +100,10 @@ class CatalogueDialog(QDialog):
     def _sync_button(self, kind: str) -> None:
         item = self.lists[kind].currentItem()
         button = self.buttons[kind]
+        if item is None:
+            button.setEnabled(False)
+            button.setToolTip("")
+            return
         count = int(item.data(COUNT_ROLE))
         button.setEnabled(count == 0)
         button.setToolTip("" if count == 0 else f"Still used {count} time(s): remove those first")
