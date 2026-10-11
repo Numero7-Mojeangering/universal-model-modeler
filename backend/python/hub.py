@@ -72,10 +72,10 @@ class Hub:
 
     async def update_profile(self, user: User) -> None:
         """Show the user's new name and colour on every cursor they have open."""
-        for presence in self.clients.values():
+        for ws, presence in list(self.clients.items()):
             if presence.user_id == user.id:
                 presence.name, presence.color = user.display_name, user.cursor_color
-                await self.broadcast({"event": "presence.update", "user": presence.to_dict()})
+                await self.broadcast({"event": "presence.update", "user": presence.to_dict()}, exclude=ws)
 
     async def close_sessions(self, session_ids: list[int]) -> None:
         """Cut the live connections of revoked sessions."""
