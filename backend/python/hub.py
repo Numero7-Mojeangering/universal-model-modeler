@@ -57,13 +57,18 @@ class Hub:
         return self.clients.pop(ws, None)
 
     async def broadcast(self, event: JsonDict, exclude: WebSocket | None = None) -> None:
+        disconnected: list[int] = []
         for ws in list(self.clients):
             if ws is exclude:
                 continue
             try:
                 await ws.send_json(event)
             except Exception:
-                self.disconnect(ws)
+                presence = self.disconnect(ws)
+                if presence is not None:
+                    disconnected.append(presence.id)
+        for presence_id in disconnected:
+            await self.broadcast({"event": "presence.left", "id": presence_id})
 
     async def update_profile(self, user: User) -> None:
         """Show the user's new name and colour on every cursor they have open."""
