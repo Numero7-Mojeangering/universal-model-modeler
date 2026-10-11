@@ -79,7 +79,7 @@ class _Signed(AuthBase):
 
     def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
         body = r.body.encode() if isinstance(r.body, str) else (r.body or b"")
-        r.headers.update(signed_headers(self.key, self.token, cast(str, r.method), cast(str, r.path_url), cast(bytes, body)))
+        r.headers.update(signed_headers(self.key, self.token, cast(str, r.method), r.path_url, cast(bytes, body)))
         return r
 
 
@@ -277,16 +277,28 @@ class Api:
 
     def _call(self, method: str, path: str, **kwargs: Any) -> Any:
         self._ensure_access()
-        for attempt in range(2):
+
+        def auth_attempt():
             auth = _Signed(cast(Ed25519PrivateKey, self._key), self._access)
-            response = self._http.request(method, self.base_url + path, timeout=5, auth=auth, **kwargs)
-            if response.status_code == 401 and attempt == 0:
-                self._refresh_tokens()  # the access token may have just expired
-                continue
-            break
+            response = self._http.request(
+                method,
+                self.base_url + path,
+                timeout=5,
+                auth=auth,
+                **kwargs,
+            )
+            return response
+
+        response = auth_attempt()
+
+        if response.status_code == 401:
+            self._refresh_tokens()
+            response = auth_attempt()
+
         if response.status_code == 401:
             self._forget()
             raise AuthError("Your session ended, please sign in again")
+
         response.raise_for_status()
         return response.json() if response.content else None
 
@@ -321,7 +333,7 @@ class Api:
         return self._call("DELETE", f"/catalogue/{kind}/{quote(name, safe='')}")
 
     def create_entity(self, type: str, x: float, y: float, shape: str, color: str) -> Any:
-        body = {"type": type, "x": x, "y": y, "shape": shape, "color": color}
+        body: dict[str, str | float] = {"type": type, "x": x, "y": y, "shape": shape, "color": color}
         return self._call("POST", "/entities", json=body)
 
     def set_type(self, entity_id: int, type: str, shape: str | None = None, color: str | None = None) -> Any:
