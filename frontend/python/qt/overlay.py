@@ -2,7 +2,7 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QAction, QEnterEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
-from .icons import icon
+from qt.icons import icon
 
 
 class ViewOverlay(QFrame):

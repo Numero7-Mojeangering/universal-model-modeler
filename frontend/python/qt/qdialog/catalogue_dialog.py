@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from api import Api
 from data import UsageInfo
-from ..icons import icon
+from qt.icons import icon
 
 # kind (as the server names it), tab title, what the count counts
 KINDS = [

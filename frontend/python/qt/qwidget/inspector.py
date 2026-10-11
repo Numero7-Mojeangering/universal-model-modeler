@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from data import EntityInfo, TypeInfo
-from ..helper.slot import InspectorKey
+from qt.helper.slot import InspectorKey
 from qt.helper.graphics import GraphicsHelper
 
 class Inspector(QWidget):

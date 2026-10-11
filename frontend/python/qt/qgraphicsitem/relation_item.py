@@ -25,7 +25,7 @@ from data import RelationInfo
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .entity_item import EntityItem
+    from qt.qgraphicsitem.entity_item import EntityItem
 from qt.helper.graphics import GraphicsHelper
 
 class RelationItem(QGraphicsItem):

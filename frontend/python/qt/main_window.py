@@ -32,13 +32,13 @@ from data import EntityInfo, TypeInfo
 
 from qt.scene import EntityItem, GraphScene, RelationItem
 from qt.helper.graphics import GraphicsHelper
-from .icons import icon
-from .qwidget.inspector import Inspector
-from .graph_view import GraphView
-from .overlay import ViewOverlay
-from .qdialog.profile_dialog import ProfileDialog
-from .qdialog.admin_dialog import UsersDialog
-from .qdialog.catalogue_dialog import CatalogueDialog
+from qt.icons import icon
+from qt.qwidget.inspector import Inspector
+from qt.graph_view import GraphView
+from qt.overlay import ViewOverlay
+from qt.qdialog.profile_dialog import ProfileDialog
+from qt.qdialog.admin_dialog import UsersDialog
+from qt.qdialog.catalogue_dialog import CatalogueDialog
 
 class MainWindow(QMainWindow):
     def __init__(self, api: Api):
