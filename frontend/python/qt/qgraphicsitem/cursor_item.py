@@ -1,5 +1,6 @@
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import (
+    QBrush,
     QColor,
     QFont,
     QFontMetricsF,
@@ -7,7 +8,6 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
     QPolygonF,
-    QTextOption
 )
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -20,6 +20,7 @@ class CursorItem(QGraphicsItem):
     """A user's cursor: a flat-coloured pointer with a name tag, constant size on screen."""
 
     CURSOR_SCALE = 1.0
+    _ARROW_POINTS: list[tuple[float, float]] = [(0, 0), (0, 17), (4.5, 13), (8.5, 21), (11.5, 19.5), (7.5, 12), (13, 12)]
 
     def __init__(self, name: str, color: str):
         super().__init__()
@@ -27,6 +28,8 @@ class CursorItem(QGraphicsItem):
         self.setZValue(1000)
         self._show_name = True
         self.placed = False  # set once the first position is known
+        self._font = QFont()
+        self._arrow = QPolygonF([QPointF(x * self.CURSOR_SCALE, y * self.CURSOR_SCALE) for x, y in self._ARROW_POINTS])
         self.set_profile(name, color)
 
     def set_name_visible(self, visible: bool) -> None:
@@ -38,7 +41,10 @@ class CursorItem(QGraphicsItem):
         self.prepareGeometryChange()
         self.user_name = name
         self.user_color = QColor(color)
-        metrics = QFontMetricsF(QFont())
+        self._body_brush = QBrush(self.user_color)
+        text_color = QColor("black") if self.user_color.lightness() > 150 else QColor("white")
+        self._pen = QPen(text_color, 1)
+        metrics = QFontMetricsF(self._font)
         self._label = QRectF(14, 16, metrics.horizontalAdvance(name) + 10, metrics.height() + 4)
         self.update()
 
@@ -54,26 +60,11 @@ class CursorItem(QGraphicsItem):
         self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
     ) -> None:
         """Paint the cursor and its name tag."""
-
-        def auto_color() -> QColor:
-            return QColor("black") if self.user_color.lightness() > 150 else QColor("white")
-
-        def draw_cursor():
-            points: list[tuple[float, float]] = [(0, 0), (0, 17), (4.5, 13), (8.5, 21), (11.5, 19.5), (7.5, 12), (13, 12)]
-            points = [(x * self.CURSOR_SCALE, y * self.CURSOR_SCALE) for x, y in points]
-            painter.setPen(QPen(auto_color(), 1))
-            painter.setBrush(self.user_color)
-            painter.drawPolygon(QPolygonF([QPointF(x, y) for x, y in points]))
-
-        def draw_name_tag():
-            painter.setPen(QPen(auto_color(), 1))
-            painter.drawRoundedRect(self._label, 4, 4)
-            painter.setPen(auto_color())
-            painter.drawText(self._label, self.user_name, QTextOption(Qt.AlignmentFlag.AlignCenter))
-        
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        draw_cursor()
+        painter.setPen(self._pen)
+        painter.setBrush(self._body_brush)
+        painter.drawPolygon(self._arrow)
 
         if self.user_name and self._show_name:
-            draw_name_tag()
+            painter.drawRoundedRect(self._label, 4, 4)
+            painter.drawText(self._label, Qt.AlignmentFlag.AlignCenter, self.user_name)

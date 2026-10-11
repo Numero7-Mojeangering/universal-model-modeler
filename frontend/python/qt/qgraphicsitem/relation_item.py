@@ -4,6 +4,7 @@ import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import (
+    QBrush,
     QColor,
     QFont,
     QFontMetricsF,
@@ -46,6 +47,10 @@ class RelationItem(QGraphicsItem):
         self._selected_pen = QPen(self._selected_color, 2.2)
         self._normal_label_pen = QPen(self._normal_color, 1)
         self._selected_label_pen = QPen(self._selected_color, 1)
+        self._text_pen = QPen(self._text_color, 1)
+        self._normal_brush = QBrush(self._normal_color)
+        self._selected_brush = QBrush(self._selected_color)
+        self._label_brush = QBrush(self._label_fill)
         source.relations.append(self)
         if target is not source:
             target.relations.append(self)
@@ -103,14 +108,13 @@ class RelationItem(QGraphicsItem):
     ) -> None:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         selected = self.isSelected()
-        color = self._selected_color if selected else self._normal_color
         painter.setPen(self._selected_pen if selected else self._normal_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(self._path)
-        painter.setBrush(color)
+        painter.setBrush(self._selected_brush if selected else self._normal_brush)
         painter.drawPolygon(self._arrow)
-        painter.setBrush(self._label_fill)
+        painter.setBrush(self._label_brush)
         painter.setPen(self._selected_label_pen if selected else self._normal_label_pen)
         painter.drawRect(self._label_rect)
-        painter.setPen(self._text_color)
+        painter.setPen(self._text_pen)
         painter.drawText(self._label_rect, Qt.AlignmentFlag.AlignCenter, self.info["type"])

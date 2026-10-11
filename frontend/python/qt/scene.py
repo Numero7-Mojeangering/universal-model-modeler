@@ -3,7 +3,6 @@ import time
 from typing import Any
 
 from PySide6.QtCore import (
-    QLineF,
     QPoint,
     QPointF,
     QRect,
@@ -13,6 +12,7 @@ from PySide6.QtCore import (
     Signal
 )
 from PySide6.QtGui import (
+    QBrush,
     QColor,
     QFont,
     QPainter,
@@ -59,6 +59,11 @@ class GraphScene(QGraphicsScene):
         self.names_visible = True
         self._link_source: EntityItem | None = None
         self.setSceneRect(-1000, -1000, 2000, 2000)  # the view resizes it to fit the content
+        self._background_brush = QBrush(QColor("#f4f4f4"))
+        self._grid_light = QPen(QColor("#e2e2e2"), 0)
+        self._grid_strong = QPen(QColor("#c4c4c4"), 0)
+        self._label_pen = QPen(QColor("#999"), 1)
+        self._label_font = QFont()
 
     def style_of(self, type_: str) -> TypeInfo:
         return self.styles.get(type_) or {"name": type_, "shape": "box", "color": "#fffbe6"}
@@ -79,7 +84,7 @@ class GraphScene(QGraphicsScene):
         self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.BackgroundLayer)
 
     def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
-        painter.fillRect(rect, QColor("#f4f4f4"))
+        painter.fillRect(rect, self._background_brush)
         if not self.grid_visible:
             return
         scale = abs(painter.worldTransform().m11()) or 1.0
@@ -88,22 +93,20 @@ class GraphScene(QGraphicsScene):
             minor *= 5
         first_x, last_x = math.floor(rect.left() / minor), math.ceil(rect.right() / minor)
         first_y, last_y = math.floor(rect.top() / minor), math.ceil(rect.bottom() / minor)
-        light, strong = QPen(QColor("#e2e2e2"), 0), QPen(QColor("#c4c4c4"), 0)
         for i in range(first_x, last_x + 1):
-            painter.setPen(strong if i % 5 == 0 else light)
-            painter.drawLine(QLineF(i * minor, rect.top(), i * minor, rect.bottom()))
+            painter.setPen(self._grid_strong if i % 5 == 0 else self._grid_light)
+            painter.drawLine(i * minor, rect.top(), i * minor, rect.bottom())
         for j in range(first_y, last_y + 1):
-            painter.setPen(strong if j % 5 == 0 else light)
-            painter.drawLine(QLineF(rect.left(), j * minor, rect.right(), j * minor))
-        font = QFont()
-        font.setPointSizeF(8 / scale)  # constant size on screen
-        painter.setFont(font)
-        painter.setPen(QColor("#999"))
+            painter.setPen(self._grid_strong if j % 5 == 0 else self._grid_light)
+            painter.drawLine(rect.left(), j * minor, rect.right(), j * minor)
+        self._label_font.setPointSizeF(8 / scale)  # constant size on screen
+        painter.setFont(self._label_font)
+        painter.setPen(self._label_pen)
         for i in range(first_x, last_x + 1):
             for j in range(first_y, last_y + 1):
                 if i % 5 == 0 and j % 5 == 0:
                     painter.drawText(
-                        QPointF(i * minor + 3 / scale, j * minor - 3 / scale), f"{int(i * minor)},{int(j * minor)}"
+                        i * minor + 3 / scale, j * minor - 3 / scale, f"{int(i * minor)},{int(j * minor)}"
                     )
 
     def reset(self, graph: Graph) -> None:

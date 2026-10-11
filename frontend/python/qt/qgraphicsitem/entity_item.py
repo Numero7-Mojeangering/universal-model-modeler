@@ -4,6 +4,7 @@ from typing import Any
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import (
+    QBrush,
     QColor,
     QFont,
     QFontMetricsF,
@@ -11,7 +12,6 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
     QPolygonF,
-    QTextOption
 )
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -41,12 +41,19 @@ class EntityItem(QGraphicsItem):
             | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
         )
         self.setZValue(1)
+        self._title_font = QFont()
+        self._title_font.setBold(True)
+        self._body_font = QFont()
+        self._outline_pen = QPen(QColor("#444"), 1.5)
+        self._selected_pen = QPen(QColor("#1e6fd9"), 2.5)
         self.update_info(info, style)
 
     def update_info(self, info: EntityInfo, style: TypeInfo) -> None:
         self.info = info
         self.shape_name = style["shape"]
         self.fill = QColor(style["color"])
+        self._fill_brush = QBrush(self.fill)
+        self._text_pen = QPen(QColor("#222") if self.fill.lightness() > 140 else QColor("white"), 1)
         self.lines = [info["type"]] + [f"{k}: {v if v is not None else ''}" for k, v in info["properties"].items()]
         self.prepareGeometryChange()
         self._measure()
@@ -55,10 +62,8 @@ class EntityItem(QGraphicsItem):
             relation.refresh()
 
     def _measure(self) -> None:
-        title_font = QFont()
-        title_font.setBold(True)
-        title_metrics = QFontMetricsF(title_font)
-        body_metrics = QFontMetricsF(QFont())
+        title_metrics = QFontMetricsF(self._title_font)
+        body_metrics = QFontMetricsF(self._body_font)
         self._line_height = body_metrics.height()
         widths = [title_metrics.horizontalAdvance(self.lines[0])]
         widths += [body_metrics.horizontalAdvance(line) for line in self.lines[1:]]
@@ -67,6 +72,13 @@ class EntityItem(QGraphicsItem):
         w, h, self._text_cy = GraphicsHelper.outer(self.shape_name, self._text_w, self._text_h)
         self._size = (w, h)
         self._path = self._build_path(w, h)
+        top = self._text_cy - self._text_h / 2
+        self._text_lines: list[tuple[QFont, QRectF, Qt.AlignmentFlag, str]] = []
+        for i, line in enumerate(self.lines):
+            font = self._title_font if i == 0 else self._body_font
+            rect = QRectF(-self._text_w / 2, top + i * self._line_height, self._text_w, self._line_height)
+            align = Qt.AlignmentFlag.AlignHCenter if i == 0 else Qt.AlignmentFlag.AlignLeft
+            self._text_lines.append((font, rect, align | Qt.AlignmentFlag.AlignVCenter, line))
 
     def _build_path(self, w: float, h: float) -> QPainterPath:
         path = QPainterPath()
@@ -99,20 +111,13 @@ class EntityItem(QGraphicsItem):
         self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
     ) -> None:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        selected = self.isSelected()
-        painter.setPen(QPen(QColor("#1e6fd9") if selected else QColor("#444"), 2.5 if selected else 1.5))
-        painter.setBrush(self.fill)
+        painter.setPen(self._selected_pen if self.isSelected() else self._outline_pen)
+        painter.setBrush(self._fill_brush)
         painter.drawPath(self._path)
-        text_color = QColor("#222") if self.fill.lightness() > 140 else QColor("white")
-        top = self._text_cy - self._text_h / 2
-        for i, line in enumerate(self.lines):
-            font = QFont()
-            font.setBold(i == 0)
+        painter.setPen(self._text_pen)
+        for font, rect, flags, line in self._text_lines:
             painter.setFont(font)
-            painter.setPen(text_color)
-            rect = QRectF(-self._text_w / 2, top + i * self._line_height, self._text_w, self._line_height)
-            align = Qt.AlignmentFlag.AlignHCenter if i == 0 else Qt.AlignmentFlag.AlignLeft
-            painter.drawText(rect, line, QTextOption(align | Qt.AlignmentFlag.AlignVCenter))
+            painter.drawText(rect, flags, line)
 
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
